@@ -81,28 +81,58 @@ export function projectStore(full, vt) {
     view.positions[n] = seen.length ? seen[seen.length - 1] : hist[0]
   }
 
-  // --- gaps, from cumulative race time ------------------------------------
+  // --- gaps ---------------------------------------------------------------
   // Intervals are not preloaded for replay (a race is ~27k rows), so the gap
-  // column is reconstructed the way a pit wall would: total elapsed time,
-  // compared at equal lap count.
-  const ranked = Object.entries(cum)
-    .map(([n, v]) => ({ num: Number(n), ...v }))
-    .sort((a, b) => b.laps - a.laps || a.total - b.total)
+  // column is reconstructed -- but the right arithmetic depends on the
+  // session. A race is decided on total elapsed time; a qualifying or
+  // practice session is decided on one best lap, and cumulative time there is
+  // meaningless because everyone runs a different number of out- and in-laps.
+  if (full.session?.session_type === 'Race') {
+    const ranked = Object.entries(cum)
+      .map(([n, v]) => ({ num: Number(n), ...v }))
+      .sort((a, b) => b.laps - a.laps || a.total - b.total)
 
-  if (ranked.length) {
-    const leader = ranked[0]
+    if (ranked.length) {
+      const leader = ranked[0]
+      ranked.forEach((d, i) => {
+        const down = leader.laps - d.laps
+        const gapLeader = down > 0
+          ? `+${down} LAP${down > 1 ? 'S' : ''}`
+          : +(d.total - leader.total).toFixed(3)
+        let interval = null
+        if (i > 0) {
+          const ahead = ranked[i - 1]
+          interval = ahead.laps === d.laps ? +(d.total - ahead.total).toFixed(3) : null
+        }
+        view.intervals[d.num] = { gap_to_leader: gapLeader, interval, driver_number: d.num }
+      })
+    }
+  } else {
+    // Best-lap order is the classification, so it also drives the running
+    // order -- the live position feed in a qualifying session reports
+    // on-track order, which is not the same thing.
+    const ranked = Object.entries(view.bestLap)
+      .filter(([, v]) => v != null)
+      .map(([n, v]) => ({ num: Number(n), best: v }))
+      .sort((a, b) => a.best - b.best)
+
+    const stamp = new Date(vt).toISOString()
     ranked.forEach((d, i) => {
-      const down = leader.laps - d.laps
-      const gapLeader = down > 0
-        ? `+${down} LAP${down > 1 ? 'S' : ''}`
-        : +(d.total - leader.total).toFixed(3)
-      let interval = null
-      if (i > 0) {
-        const ahead = ranked[i - 1]
-        interval = ahead.laps === d.laps ? +(d.total - ahead.total).toFixed(3) : null
+      view.intervals[d.num] = {
+        gap_to_leader: i === 0 ? 0 : +(d.best - ranked[0].best).toFixed(3),
+        interval: i === 0 ? null : +(d.best - ranked[i - 1].best).toFixed(3),
+        driver_number: d.num,
       }
-      view.intervals[d.num] = { gap_to_leader: gapLeader, interval, driver_number: d.num }
+      view.positions[d.num] = { position: i + 1, driver_number: d.num, date: stamp }
     })
+
+    // Anyone without a lap yet sits at the back, in their entry order.
+    let p = ranked.length
+    for (const n of full.driverNums) {
+      if (!view.positions[n] || view.bestLap[n] == null) {
+        view.positions[n] = { position: ++p, driver_number: n, date: stamp }
+      }
+    }
   }
 
   // --- stints, pit stops and race control up to the virtual time ----------
