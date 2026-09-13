@@ -72,9 +72,13 @@ export function projectStore(full, vt) {
   }
 
   // --- order, from the position feed as it stood then ----------------------
+  // Before a driver's first position event the feed has nothing to say, so
+  // fall back to their earliest known position -- which is the grid slot.
   for (const n of full.driverNums) {
-    const rows = (full.positionHistory?.[n] || []).filter((r) => ms(r.date) <= vt)
-    if (rows.length) view.positions[n] = rows[rows.length - 1]
+    const hist = full.positionHistory?.[n] || []
+    if (!hist.length) continue
+    const seen = hist.filter((r) => ms(r.date) <= vt)
+    view.positions[n] = seen.length ? seen[seen.length - 1] : hist[0]
   }
 
   // --- gaps, from cumulative race time ------------------------------------

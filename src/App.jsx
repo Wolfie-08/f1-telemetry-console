@@ -38,14 +38,17 @@ export default function App() {
   const liveKey = season.liveSession?.session_key ?? null
   const sessionKey = mode === 'live' ? liveKey : browseKey
 
-  // Archive defaults: the latest round, and its race.
+  // Archive defaults. The point of the archive is finished sessions, so the
+  // default lands on the most recent round that actually has one -- not on
+  // this weekend's race when it is still an hour away.
   const rounds = season.rounds
+  const finished = (s) => new Date(s.date_end).getTime() < Date.now()
+
   useEffect(() => {
     if (mode !== 'browse' || !rounds.length) return
     if (rounds.some((r) => r.meetingKey === roundKey)) return
-    const now = Date.now()
-    const past = rounds.filter((r) => new Date(r.start).getTime() <= now)
-    setRoundKey((past[past.length - 1] || rounds[0]).meetingKey)
+    const withData = rounds.filter((r) => r.sessions.some(finished))
+    setRoundKey((withData[withData.length - 1] || rounds[0]).meetingKey)
   }, [mode, rounds, roundKey])
 
   useEffect(() => {
@@ -53,8 +56,12 @@ export default function App() {
     const round = rounds.find((r) => r.meetingKey === roundKey)
     if (!round) return
     if (round.sessions.some((s) => s.session_key === browseKey)) return
-    const race = [...round.sessions].reverse().find((s) => s.session_type === 'Race')
-    setBrowseKey((race || round.sessions[round.sessions.length - 1]).session_key)
+    const done = round.sessions.filter(finished)
+    const pick =
+      [...done].reverse().find((s) => s.session_type === 'Race')
+      || done[done.length - 1]
+      || round.sessions[round.sessions.length - 1]
+    setBrowseKey(pick.session_key)
   }, [mode, roundKey, rounds, browseKey])
 
   // --- the feed -----------------------------------------------------------
@@ -67,7 +74,12 @@ export default function App() {
         && now <= new Date(full.session.date_end).getTime() + 20 * 60_000
   }, [full.session, clock])
 
-  const isPast = Boolean(full.session) && !live && phase === 'ready'
+  // A session is replayable only once it has actually finished. Checking
+  // "not live" is not enough: a session that has not started yet is also not
+  // live, and replaying an empty future session is nonsense.
+  const isPast = Boolean(full.session)
+    && phase === 'ready'
+    && Date.now() > new Date(full.session.date_end).getTime()
   const replay = useReplay(isPast ? full.session : null, phase === 'ready')
   const replaying = isPast && replay.vt != null
 
