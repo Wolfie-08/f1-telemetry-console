@@ -47,12 +47,13 @@ export function useReplay(session, ready) {
     return () => clearInterval(id)
   }, [playing, speed, session?.session_key, vt == null])
 
-  // Pull the cars' positions for wherever the clock is now. One request at
-  // most every 1.2s keeps this far inside the rate limit even at 60x.
+  // Pull the cars' positions for wherever the clock is now. Replay makes no
+  // other requests, so one every 2.5s sits inside even the community tier's
+  // 30/min budget, at any playback speed.
   useEffect(() => {
     if (!session || vt == null) return
     const now = Date.now()
-    if (now - lastLocFetch.current < 1200) return
+    if (now - lastLocFetch.current < 2500) return
     lastLocFetch.current = now
     let dead = false
     api.location({

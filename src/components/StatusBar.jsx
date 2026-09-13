@@ -6,6 +6,8 @@ export default function StatusBar({ stats, store, phase, error, live }) {
   return (
     <div className="statusbar">
       <span>openf1 <b>{phase}</b></span>
+      <span>tier <b>{stats.tier}</b></span>
+      <span>pace <b>{(60000 / stats.minGapMs).toFixed(0)}/min</b></span>
       <span>req <b>{stats.sent}</b></span>
       <span>queued <b>{stats.queued}</b></span>
       <span>429 <b style={{ color: stats.throttled ? 'var(--yellow)' : undefined }}>{stats.throttled}</b></span>

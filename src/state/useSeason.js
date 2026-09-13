@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import * as api from '../api/openf1.js'
 
 // ---------------------------------------------------------------------------
-// Season catalogue and championship standings.
+// Season catalogue, blackout detection, and championship standings.
 //
-// OpenF1 has no standings endpoint, but every race's /session_result carries
-// the points awarded, so the championship is just those summed across the
-// season. That is one request per race weekend, which is why the result is
-// cached in localStorage and only recomputed when another race has finished.
+// The calendar is cached in localStorage, which is not an optimisation but a
+// requirement: while a session is live the API answers 401 to anonymous
+// callers, so without a cached calendar the console cannot even tell that a
+// race is running -- it just sees requests fail and has nothing to say.
 // ---------------------------------------------------------------------------
 
 export const SEASONS = (() => {
@@ -17,24 +17,44 @@ export const SEASONS = (() => {
   return out
 })()
 
-/** Sessions for a season, grouped into rounds (meetings) in calendar order. */
+const calKey = (year) => `f1console.calendar.${year}`
+const readCal = (year) => {
+  try { return JSON.parse(localStorage.getItem(calKey(year)) || 'null') } catch { return null }
+}
+const writeCal = (year, rows) => {
+  try { localStorage.setItem(calKey(year), JSON.stringify(rows)) } catch { /* private mode */ }
+}
+
 export function useSeason(year) {
-  const [sessions, setSessions] = useState([])
+  const [sessions, setSessions] = useState(() => readCal(year) || [])
+  const [fromCache, setFromCache] = useState(() => Boolean(readCal(year)))
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let dead = false
+    const cached = readCal(year)
+    setSessions(cached || [])
+    setFromCache(Boolean(cached))
     setLoading(true); setError(null)
+
     api.sessions({ year })
       .then((rows) => {
         if (dead) return
-        setSessions(rows.filter((r) => !r.is_cancelled))
+        const live = rows.filter((r) => !r.is_cancelled)
+        setSessions(live)
+        setFromCache(false)
+        writeCal(year, live)
         setLoading(false)
       })
-      .catch((e) => { if (!dead) { setError(String(e.message || e)); setLoading(false) } })
+      .catch((e) => {
+        if (dead) return
+        setError(String(e.message || e))
+        setLoading(false)
+      })
     return () => { dead = true }
-  }, [year])
+  }, [year, attempt])
 
   const rounds = useMemo(() => {
     const byMeeting = new Map()
@@ -63,53 +83,77 @@ export function useSeason(year) {
     return list
   }, [sessions])
 
-  const now = Date.now()
+  const bucket = Math.floor(Date.now() / 15_000)   // re-evaluate every 15s
 
-  /** A session counts as live from 15 min before its start to 20 min after. */
   const liveSession = useMemo(() => sessions.find((s) => {
-    const a = new Date(s.date_start).getTime() - 15 * 60_000
-    const b = new Date(s.date_end).getTime() + 20 * 60_000
-    return now >= a && now <= b
-  }), [sessions, Math.floor(now / 30_000)])
+    const now = Date.now()
+    return now >= new Date(s.date_start).getTime() - 15 * 60_000
+        && now <= new Date(s.date_end).getTime() + 20 * 60_000
+  }), [sessions, bucket])
 
   const nextSession = useMemo(() => {
-    const future = sessions
+    const now = Date.now()
+    return [...sessions]
       .filter((s) => new Date(s.date_start).getTime() > now)
-      .sort((a, b) => new Date(a.date_start) - new Date(b.date_start))
-    return future[0] || null
-  }, [sessions, Math.floor(now / 30_000)])
+      .sort((a, b) => new Date(a.date_start) - new Date(b.date_start))[0] || null
+  }, [sessions, bucket])
 
-  const lastSession = useMemo(() => {
-    const past = sessions
-      .filter((s) => new Date(s.date_start).getTime() <= now)
-      .sort((a, b) => new Date(a.date_start) - new Date(b.date_start))
-    return past[past.length - 1] || null
-  }, [sessions, Math.floor(now / 30_000)])
+  // The API is shut to anonymous callers while a session runs. If requests
+  // are failing and the calendar says something is live, that -- not a broken
+  // network -- is almost certainly what is happening.
+  //
+  // The harder case is a first visit DURING a blackout: there is no cached
+  // calendar, so the console cannot name the session or count down to its
+  // end. It still must not claim the season is empty, which is the one thing
+  // it definitely is not.
+  const blackout = useMemo(() => {
+    const failing = api.stats.lastFailKind === 'offline' || api.stats.lastFailKind === 'blocked'
+    if (!failing) return null
+    if (api.stats.lastOkAt && Date.now() - api.stats.lastOkAt < 20_000) return null
+    if (liveSession) {
+      return {
+        session: liveSession,
+        // Access returns when the session ends; let the feed settle first.
+        opensAt: new Date(liveSession.date_end).getTime() + 60_000,
+        known: true,
+      }
+    }
+    if (!sessions.length) return { session: null, opensAt: null, known: false }
+    return null
+  }, [liveSession, sessions.length, bucket,
+      api.stats.lastFailKind, api.stats.lastOkAt, api.stats.failed])
 
-  return { sessions, rounds, loading, error, liveSession, nextSession, lastSession }
+  return {
+    sessions, rounds, loading, error, fromCache,
+    liveSession, nextSession, blackout,
+    retry: () => setAttempt((n) => n + 1),
+  }
 }
 
 /* -------------------------------------------------------------------------- */
 
-const cacheKey = (year) => `f1console.standings.${year}`
-
+const standKey = (year) => `f1console.standings.${year}`
 const readCache = (year) => {
-  try { return JSON.parse(localStorage.getItem(cacheKey(year)) || 'null') } catch { return null }
+  try { return JSON.parse(localStorage.getItem(standKey(year)) || 'null') } catch { return null }
 }
 const writeCache = (year, value) => {
-  try { localStorage.setItem(cacheKey(year), JSON.stringify(value)) } catch { /* private mode */ }
+  try { localStorage.setItem(standKey(year), JSON.stringify(value)) } catch { /* private mode */ }
 }
 
+const teamColour = (c) => (c ? `#${String(c).replace('#', '')}` : '#8b95a5')
+
 /**
- * Drivers' and constructors' championships for a season.
- * @param {number} year
- * @param {Array}  sessions  the season's sessions (from useSeason)
- * @param {boolean} enabled  only fetch when the standings view is open
+ * Drivers' and constructors' championships.
+ *
+ * OpenF1 publishes championship_drivers / championship_teams, which is one
+ * request and authoritative about sprint points and penalties. Older seasons
+ * may not have it, so this falls back to summing each round's classification.
  */
 export function useStandings(year, sessions, enabled) {
-  const [state, setState] = useState({ status: 'idle', drivers: [], teams: [], rounds: 0, progress: 0 })
+  const [state, setState] = useState({
+    status: 'idle', drivers: [], teams: [], rounds: 0, progress: 0, source: null,
+  })
 
-  // Points-scoring sessions: the grand prix itself plus any sprint.
   const scoring = useMemo(() => sessions
     .filter((s) => s.session_type === 'Race' && new Date(s.date_end).getTime() < Date.now())
     .sort((a, b) => new Date(a.date_start) - new Date(b.date_start)), [sessions])
@@ -123,14 +167,59 @@ export function useStandings(year, sessions, enabled) {
       setState({ status: 'ready', ...cached, progress: scoring.length })
       return
     }
-
     setState((s) => ({ ...s, status: 'loading', progress: 0 }))
 
+    const last = scoring[scoring.length - 1]
+
+    const publish = (payload, source) => {
+      if (dead) return
+      writeCache(year, { ...payload, source })
+      setState({ status: 'ready', ...payload, source, progress: scoring.length })
+    }
+
     ;(async () => {
+      // --- preferred: the official tables ---------------------------------
       try {
-        // Team identity comes from the most recent session's driver list —
-        // mid-season swaps mean the latest entry is the one worth showing.
-        const last = scoring[scoring.length - 1]
+        const [dRows, tRows] = [
+          await api.championshipDrivers({ session_key: last.session_key }),
+          await api.championshipTeams({ session_key: last.session_key }),
+        ]
+        if (dead) return
+        if (dRows?.length) {
+          const drivers = dRows
+            .map((r) => ({
+              num: r.driver_number,
+              tla: r.name_acronym || r.driver_acronym || String(r.driver_number),
+              name: r.full_name || r.driver_name || '',
+              team: r.team_name || 'Unknown',
+              color: teamColour(r.team_colour),
+              points: r.points ?? 0,
+              wins: r.wins ?? 0,
+              podiums: r.podiums ?? 0,
+              pos: r.position ?? null,
+            }))
+            .sort((a, b) => (a.pos ?? 99) - (b.pos ?? 99) || b.points - a.points)
+          drivers.forEach((d, i) => { if (d.pos == null) d.pos = i + 1 })
+
+          const teams = (tRows?.length ? tRows : [])
+            .map((r) => ({
+              team: r.team_name,
+              color: teamColour(r.team_colour),
+              points: r.points ?? 0,
+              wins: r.wins ?? 0,
+              pos: r.position ?? null,
+              drivers: drivers.filter((d) => d.team === r.team_name).map((d) => d.tla),
+            }))
+            .sort((a, b) => (a.pos ?? 99) - (b.pos ?? 99) || b.points - a.points)
+          teams.forEach((t, i) => { if (t.pos == null) t.pos = i + 1 })
+
+          publish({ drivers, teams, rounds: scoring.length }, 'official')
+          return
+        }
+      } catch { /* fall through to the manual tally */ }
+
+      // --- fallback: sum every round's classification ----------------------
+      try {
         const roster = await api.drivers({ session_key: last.session_key })
         const meta = {}
         for (const d of roster) {
@@ -138,15 +227,12 @@ export function useStandings(year, sessions, enabled) {
             tla: d.name_acronym || String(d.driver_number),
             name: d.full_name || '',
             team: d.team_name || 'Unknown',
-            color: d.team_colour ? `#${d.team_colour}` : '#8b95a5',
+            color: teamColour(d.team_colour),
           }
         }
 
-        const points = {}
-        const wins = {}
-        const podiums = {}
+        const points = {}, wins = {}, podiums = {}
         let done = 0
-
         for (const s of scoring) {
           if (dead) return
           const rows = await api.sessionResult({ session_key: s.session_key })
@@ -178,9 +264,7 @@ export function useStandings(year, sessions, enabled) {
         const teams = Object.values(byTeam).sort((a, b) => b.points - a.points || b.wins - a.wins)
         teams.forEach((t, i) => { t.pos = i + 1 })
 
-        const payload = { drivers, teams, rounds: scoring.length }
-        writeCache(year, payload)
-        setState({ status: 'ready', ...payload, progress: scoring.length })
+        publish({ drivers, teams, rounds: scoring.length }, 'summed')
       } catch (e) {
         if (!dead) setState((s) => ({ ...s, status: 'error', error: String(e.message || e) }))
       }

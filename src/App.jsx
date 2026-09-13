@@ -15,6 +15,7 @@ import GapChart from './components/GapChart.jsx'
 import ComparePanel from './components/ComparePanel.jsx'
 import Standings from './components/Standings.jsx'
 import Countdown from './components/Countdown.jsx'
+import AccessPanel from './components/AccessPanel.jsx'
 
 const THIS_YEAR = new Date().getUTCFullYear()
 
@@ -103,6 +104,9 @@ export default function App() {
       : [cur[1], n])
 
   const waitingForLive = mode === 'live' && !liveKey
+  // A blackout outranks everything: with the API shut there is no data for
+  // any view, so saying so beats rendering empty panels.
+  const shut = season.blackout
 
   return (
     <div className="app">
@@ -121,7 +125,11 @@ export default function App() {
         liveSession={season.liveSession}
       />
 
-      {tab === 'standings' ? (
+      {shut ? (
+        <div className="main grid-one">
+          <AccessPanel blackout={shut} onRetry={season.retry} />
+        </div>
+      ) : tab === 'standings' ? (
         <div className="main grid-one">
           <Standings standings={standings} year={year} />
         </div>

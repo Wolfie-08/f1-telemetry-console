@@ -9,19 +9,23 @@ import { apiDate, offsetToSeconds } from '../lib/format.js'
 // tiers by how fast they actually change, so the request budget stays well
 // under OpenF1's 3 req/s ceiling:
 //
-//   fast   (3s)  location, intervals, position
-//   mid    (6s)  laps
-//   slow  (30s)  stints, pit, race_control, weather
-//   cold  (90s)  session_result
+//   fast   (5s)  location, intervals, position
+//   mid   (10s)  laps
+//   slow  (45s)  stints, pit, race_control, weather
+//   cold (120s)  session_result
+//
+// The cadence is set by the per-MINUTE rate limit, not the per-second one.
+// Live data needs an authorised key, which allows 60 req/min; these tiers
+// come to roughly 48/min, leaving headroom for the compare view.
 //
 // Every incremental resource is fetched with a `date>` cursor so each poll
 // returns only what is new. History is backfilled once on session load.
 // ---------------------------------------------------------------------------
 
-const FAST_MS = 3000
-const MID_MS  = 6000
-const SLOW_MS = 30000
-const COLD_MS = 90000
+const FAST_MS = 5000
+const MID_MS  = 10000
+const SLOW_MS = 45000
+const COLD_MS = 120000
 
 const emptyStore = () => ({
   session: null,

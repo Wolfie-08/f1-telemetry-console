@@ -382,3 +382,22 @@ button.on { background: var(--accent); border-color: var(--accent); color: #0627
 .idle-when { display: flex; gap: 34px; }
 .idle-when > div { display: flex; flex-direction: column; gap: 3px; align-items: center; }
 .idle-when .mono { font-size: 12px; color: var(--text-2); }
+
+/* --- access / credentials ------------------------------------------------ */
+
+.access {
+  display: flex; flex-direction: column; gap: 8px;
+  width: min(420px, 90vw);
+  padding: 16px; border: 1px solid var(--line); border-radius: 4px;
+  background: var(--panel-2);
+}
+.access input {
+  font-family: var(--mono); font-size: 12px;
+  color: var(--text); background: #0e131a;
+  border: 1px solid var(--line); border-radius: 3px; padding: 7px 9px;
+}
+.access input:focus { outline: none; border-color: var(--accent); }
+.access-note {
+  margin: 0; font-size: 11px; line-height: 1.6; color: var(--dim);
+}
+.access-note a { color: var(--accent); }
