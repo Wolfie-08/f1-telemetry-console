@@ -7,7 +7,7 @@ const W = 900, H = 300, M = { t: 12, r: 14, b: 22, l: 44 }
  * Race trace: cumulative gap to the lap leader, per lap.
  * Flat lines = matched pace; a step = a pit stop; a slope = real pace delta.
  */
-export default function GapChart({ store, rows, selected, tick }) {
+export default function GapChart({ store, rows, selected, tick, isRace }) {
   const nums = rows.slice(0, 12).map((r) => r.num)
   const { traces, maxLap } = useMemo(() => gapTraces(store, nums), [store, nums.join(','), tick])
 
@@ -30,7 +30,13 @@ export default function GapChart({ store, rows, selected, tick }) {
         <span className="label">top {nums.length}</span>
       </div>
       <div className="panel-body" style={{ overflow: 'hidden' }}>
-        {traces.length ? (
+        {!isRace ? (
+          <div className="hint">
+            The race trace compares cumulative race time lap by lap, so it only
+            means anything in a race. Practice and qualifying mix flying laps
+            with in- and out-laps, which would make this chart noise.
+          </div>
+        ) : traces.length ? (
           <svg className="chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
             {Array.from({ length: yTicks + 1 }, (_, i) => {
               const g = (maxGap / yTicks) * i

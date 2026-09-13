@@ -1,6 +1,19 @@
 import { FALLBACK_TEAM } from './constants.js'
 
 /**
+ * session_result.gap_to_leader is a number for a race but an array of one
+ * entry per qualifying segment ([Q1, Q2, Q3]). Take the last segment the
+ * driver actually set a time in.
+ */
+function resultGap(v) {
+  if (Array.isArray(v)) {
+    for (let i = v.length - 1; i >= 0; i--) if (v[i] != null) return v[i]
+    return null
+  }
+  return v ?? null
+}
+
+/**
  * Flatten the feed store into display rows for the timing tower,
  * sorted by live classification.
  */
@@ -44,6 +57,9 @@ export function towerRows(s, nowMs = Date.now()) {
       : 'neu'
 
     const res = s.result.find((r) => r.driver_number === n) || null
+    // The intervals feed stops the moment a session ends, so a finished
+    // session reads its gaps off the official classification instead.
+    const gapLeader = iv?.gap_to_leader ?? resultGap(res?.gap_to_leader)
 
     return {
       num: n,
@@ -53,7 +69,7 @@ export function towerRows(s, nowMs = Date.now()) {
       color: d.team_colour ? `#${d.team_colour}` : FALLBACK_TEAM,
       pos: posRow?.position ?? res?.position ?? 99,
       lapNumber: last?.lap_number ?? 0,
-      gapLeader: iv?.gap_to_leader ?? null,
+      gapLeader,
       interval: iv?.interval ?? null,
       lastLap: last?.lap_duration ?? null,
       lapClass,

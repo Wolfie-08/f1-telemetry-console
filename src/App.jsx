@@ -15,16 +15,20 @@ const YEAR = new Date().getUTCFullYear()
 export default function App() {
   const catalog = useSessionCatalog(YEAR)
   const [sessionKey, setSessionKey] = useState(null)
+  const [pinned, setPinned] = useState(false)   // user picked a session by hand
   const [tab, setTab] = useState('race')
   const [selected, setSelected] = useState([])
   const [clock, setClock] = useState(() => new Date().toISOString())
 
-  // Default to whatever is running now, else the most recent session.
+  // Follow whatever is running now, else the most recent session. This keeps
+  // running: open the page before lights out on qualifying data and it hops to
+  // the race by itself the moment the race session goes live. A manual pick
+  // from the dropdown pins the choice and stops the following.
   useEffect(() => {
-    if (sessionKey) return
+    if (pinned) return
     const pick = catalog.live || catalog.latest
-    if (pick) setSessionKey(pick.session_key)
-  }, [catalog.live, catalog.latest, sessionKey])
+    if (pick && pick.session_key !== sessionKey) setSessionKey(pick.session_key)
+  }, [catalog.live, catalog.latest, pinned, sessionKey])
 
   useEffect(() => {
     const id = setInterval(() => setClock(new Date().toISOString()), 1000)
@@ -50,17 +54,21 @@ export default function App() {
       : cur.length < 2 ? [...cur, n]
       : [cur[1], n])
 
+  // Newest first, and never truncated -- a cut-off list silently desynchronises
+  // the <select> from the session actually loaded.
   const sessionList = useMemo(
-    () => [...catalog.list].sort((a, b) => new Date(b.date_start) - new Date(a.date_start)).slice(0, 40),
+    () => [...catalog.list].sort((a, b) => new Date(b.date_start) - new Date(a.date_start)),
     [catalog.list],
   )
+
+  const pickSession = (key) => { setPinned(true); setSessionKey(key) }
 
   return (
     <div className="app">
       <Header
         store={data} status={status} lap={lap} live={live}
         tab={tab} setTab={setTab}
-        sessions={sessionList} sessionKey={sessionKey} setSessionKey={setSessionKey}
+        sessions={sessionList} sessionKey={sessionKey} setSessionKey={pickSession}
         clock={clock}
       />
 
@@ -68,7 +76,8 @@ export default function App() {
         <div className="main grid-race">
           <TimingTower rows={rows} selected={selected} onSelect={toggle} />
           <TrackMap store={data} rows={rows} selected={selected} live={live} />
-          <GapChart store={data} rows={rows} selected={selected} tick={tick} />
+          <GapChart store={data} rows={rows} selected={selected} tick={tick}
+                    isRace={data.session?.session_type === 'Race'} />
           <RaceControlFeed messages={data.rc} gmt={data.gmt || 0} />
           <StintBars store={data} rows={rows} maxLap={lap} />
         </div>
