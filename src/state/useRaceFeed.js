@@ -36,6 +36,8 @@ const emptyStore = () => ({
   sessionBestSectors: [null, null, null],
   intervals: {},
   positions: {},
+  positionHistory: {},   // full trace, so replay can rewind the order
+  weatherHistory: [],
   stints: {},
   pits: [],
   rc: [],
@@ -110,6 +112,7 @@ export function useRaceFeed(sessionKey) {
     for (const r of rows) {
       const cur = s.positions[r.driver_number]
       if (!cur || r.date >= cur.date) s.positions[r.driver_number] = r
+      ;(s.positionHistory[r.driver_number] ||= []).push(r)
       if (!cursors.current.positions || r.date > cursors.current.positions) {
         cursors.current.positions = r.date
       }
@@ -200,6 +203,7 @@ export function useRaceFeed(sessionKey) {
         s.pits = await api.pit({ session_key: sessionKey })
         ingestRc(await api.raceControl({ session_key: sessionKey }))
         const w = await api.weather({ session_key: sessionKey })
+        s.weatherHistory = w
         if (w.length) { s.weather = w[w.length - 1]; cursors.current.weather = w[w.length - 1].date }
         ingestIntervals(await api.intervals({ session_key: sessionKey, 'date>': apiDate(Date.now() - 120_000) }))
         s.result = await api.sessionResult({ session_key: sessionKey })
@@ -254,7 +258,11 @@ export function useRaceFeed(sessionKey) {
             session_key: sessionKey,
             'date>': cursors.current.weather || apiDate(Date.now() - 10 * 60_000),
           })
-          if (w2.length) { s.weather = w2[w2.length - 1]; cursors.current.weather = w2[w2.length - 1].date }
+          if (w2.length) {
+            s.weatherHistory = [...s.weatherHistory, ...w2]
+            s.weather = w2[w2.length - 1]
+            cursors.current.weather = w2[w2.length - 1].date
+          }
         })
 
         const cold = guard(async () => {

@@ -23,10 +23,7 @@ function Metric({ label, value, color }) {
   )
 }
 
-export default function Header({
-  store, status, lap, live, tab, setTab,
-  sessions, sessionKey, setSessionKey, clock,
-}) {
+export default function Header({ store, status, lap, live, replaying, tab, setTab, clock }) {
   const st = STATUS[status] || STATUS.CLEAR
   const sb = store.sessionBestLap
   const sbDrv = sb ? (store.drivers[sb.driver]?.name_acronym ?? sb.driver) : null
@@ -70,23 +67,17 @@ export default function Header({
       </div>
 
       <span className="pill" style={{
-        background: live ? '#3d1116' : '#1a1f27',
-        color: live ? '#ff7b88' : 'var(--dim)',
+        background: live ? '#3d1116' : replaying ? '#1b2a3d' : '#1a1f27',
+        color: live ? '#ff7b88' : replaying ? '#7fb5ff' : 'var(--dim)',
       }}>
-        <i className={`dot ${live ? 'blink' : ''}`} />{live ? 'LIVE' : 'REPLAY'}
+        <i className={`dot ${live ? 'blink' : ''}`} />
+        {live ? 'LIVE' : replaying ? 'REPLAY' : 'ARCHIVE'}
       </span>
-
-      <select value={sessionKey || ''} onChange={(e) => setSessionKey(Number(e.target.value))}>
-        {sessions.map((s) => (
-          <option key={s.session_key} value={s.session_key}>
-            {s.circuit_short_name} — {s.session_name}
-          </option>
-        ))}
-      </select>
 
       <div className="tabs">
         <button className={tab === 'race' ? 'on' : ''} onClick={() => setTab('race')}>RACE</button>
         <button className={tab === 'compare' ? 'on' : ''} onClick={() => setTab('compare')}>COMPARE</button>
+        <button className={tab === 'standings' ? 'on' : ''} onClick={() => setTab('standings')}>TABLE</button>
       </div>
     </div>
   )
