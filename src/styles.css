@@ -1,0 +1,292 @@
+/* ==========================================================================
+   F1 Telemetry Console — pit-wall styling.
+   Dense, flat, monospaced numerals. No decorative gradients or glow.
+   ========================================================================== */
+
+:root {
+  --bg:        #0a0d12;
+  --panel:     #11151c;
+  --panel-2:   #161b24;
+  --raised:    #1b212c;
+  --line:      #232b38;
+  --line-soft: #1a212b;
+
+  --text:  #d8dee8;
+  --text-2:#9aa6b8;
+  --dim:   #66717f;
+
+  --accent: #00d8c0;
+  --purple: #b45cff;
+  --green:  #2fd35c;
+  --yellow: #d8b02a;
+  --red:    #e0384a;
+  --blue:   #3b82f6;
+
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  --row-h: 30px;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* --- primitives ---------------------------------------------------------- */
+
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+.label {
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+  font-weight: 600;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-2);
+  flex: 0 0 auto;
+}
+
+.panel-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+
+.scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.scroll::-webkit-scrollbar-thumb { background: #2a3342; border-radius: 4px; }
+.scroll::-webkit-scrollbar-track { background: transparent; }
+
+button, select {
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--text-2);
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 4px 9px;
+  cursor: pointer;
+}
+button:hover, select:hover { border-color: #33404f; color: var(--text); }
+button.on { background: var(--accent); border-color: var(--accent); color: #062723; font-weight: 700; }
+
+/* --- app shell ----------------------------------------------------------- */
+
+.app { height: 100%; display: flex; flex-direction: column; }
+
+.topbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 12px;
+  height: 46px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  display: flex; align-items: baseline; gap: 8px;
+  padding-right: 14px; border-right: 1px solid var(--line); height: 100%;
+}
+.brand b { font-size: 14px; letter-spacing: 0.03em; }
+.brand span { font-size: 9.5px; letter-spacing: 0.18em; color: var(--dim); text-transform: uppercase; }
+
+.meta { display: flex; align-items: center; gap: 16px; flex: 1 1 auto; min-width: 0; }
+
+.metric { display: flex; flex-direction: column; gap: 1px; line-height: 1.15; }
+.metric .v { font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 8px; border-radius: 3px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+}
+.dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.dot.blink { animation: blink 1.6s ease-in-out infinite; }
+@keyframes blink { 0%,100% { opacity: 1 } 50% { opacity: 0.25 } }
+
+.tabs { display: flex; gap: 2px; }
+
+.main { flex: 1 1 auto; min-height: 0; padding: 8px; display: grid; gap: 8px; }
+
+.grid-race {
+  grid-template-columns: minmax(430px, 1.05fr) minmax(340px, 1fr) minmax(260px, 0.62fr);
+  grid-template-rows: minmax(0, 1.35fr) minmax(0, 1fr);
+  grid-template-areas:
+    "tower map   rc"
+    "tower gaps  stints";
+}
+.a-tower  { grid-area: tower; }
+.a-map    { grid-area: map; }
+.a-gaps   { grid-area: gaps; }
+.a-rc     { grid-area: rc; }
+.a-stints { grid-area: stints; }
+
+.grid-compare {
+  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+@media (max-width: 1280px) {
+  .grid-race {
+    grid-template-columns: minmax(380px, 1fr) minmax(300px, 1fr);
+    grid-template-rows: minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 0.9fr);
+    grid-template-areas:
+      "tower map"
+      "tower gaps"
+      "rc    stints";
+  }
+}
+
+/* --- timing tower -------------------------------------------------------- */
+
+.tower { width: 100%; border-collapse: collapse; font-family: var(--mono); }
+
+.tower { table-layout: auto; }
+
+.tower thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--line);
+  font-family: var(--sans);
+  font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--dim); font-weight: 600;
+  padding: 5px 6px; text-align: right; white-space: nowrap;
+}
+.tower thead th.l { text-align: left; }
+
+.tower tbody tr { border-bottom: 1px solid var(--line-soft); height: var(--row-h); }
+.tower tbody tr:hover { background: #161d27; }
+.tower tbody tr.sel { background: #12242a; }
+.tower tbody tr.out { opacity: 0.42; }
+
+.tower td {
+  padding: 0 5px; text-align: right; white-space: nowrap;
+  font-size: 11.5px; font-variant-numeric: tabular-nums;
+}
+.tower td.l { text-align: left; }
+
+.pos { color: var(--text-2); width: 26px; font-size: 12px; }
+.teamstripe { width: 3px; padding: 0 !important; }
+
+.drv { display: flex; align-items: center; gap: 7px; }
+.drv .num { color: var(--dim); font-size: 11px; width: 18px; text-align: right; }
+.drv .tla { font-weight: 700; letter-spacing: 0.04em; font-size: 12.5px; }
+
+.tyre {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 17px; height: 17px; border-radius: 50%;
+  border: 2px solid currentColor;
+  font-size: 9px; font-weight: 800; font-family: var(--sans);
+}
+.tyre-age { color: var(--dim); font-size: 10px; margin-left: 4px; }
+
+.segs { display: inline-flex; gap: 1px; vertical-align: middle; }
+.segs i { display: block; width: 3px; height: 7px; border-radius: 1px; }
+.secgrp { display: inline-flex; gap: 5px; align-items: center; justify-content: flex-end; }
+
+.pb  { color: var(--green); }
+.sb  { color: var(--purple); }
+.neu { color: var(--text); }
+
+.badge {
+  font-family: var(--sans); font-size: 8.5px; font-weight: 800;
+  letter-spacing: 0.08em; padding: 1.5px 4px; border-radius: 2px;
+}
+.badge.pit { background: var(--blue); color: #fff; }
+.badge.out { background: #3a2226; color: #ff8b96; }
+.badge.drs { background: #14361f; color: var(--green); }
+
+/* --- track map ----------------------------------------------------------- */
+
+.map-wrap { position: relative; width: 100%; height: 100%; }
+.map-wrap svg { width: 100%; height: 100%; display: block; }
+
+.car-dot { paint-order: stroke; }
+.car-label {
+  font-family: var(--mono); font-size: 230px; font-weight: 700;
+  fill: #0a0d12; dominant-baseline: middle; text-anchor: middle;
+}
+
+/* --- race control -------------------------------------------------------- */
+
+.rc-item {
+  display: grid; grid-template-columns: 56px 1fr; gap: 8px;
+  padding: 5px 10px; border-bottom: 1px solid var(--line-soft);
+  font-size: 11.5px; line-height: 1.35;
+}
+.rc-item time { font-family: var(--mono); font-size: 10.5px; color: var(--dim); }
+.rc-item.flag-red    { border-left: 2px solid var(--red); }
+.rc-item.flag-yellow { border-left: 2px solid var(--yellow); }
+.rc-item.flag-green  { border-left: 2px solid var(--green); }
+.rc-item.flag-chequered { border-left: 2px solid #e8e8e8; }
+
+/* --- stint bars ---------------------------------------------------------- */
+
+.stint-row { display: grid; grid-template-columns: 54px 1fr; align-items: center; gap: 8px; height: 22px; padding: 0 10px; }
+.stint-track { position: relative; height: 11px; background: #10151c; border-radius: 2px; overflow: hidden; }
+.stint-seg { position: absolute; top: 0; bottom: 0; border-right: 1px solid #0a0d12; }
+.stint-pit { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--text); }
+
+/* --- charts -------------------------------------------------------------- */
+
+.chart { width: 100%; height: 100%; display: block; }
+.axis-line { stroke: var(--line); stroke-width: 1; }
+.grid-line { stroke: var(--line-soft); stroke-width: 1; }
+.axis-text { fill: var(--dim); font-family: var(--mono); font-size: 9px; }
+
+/* --- compare view -------------------------------------------------------- */
+
+.cmp-side { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.cmp-stack { display: grid; gap: 8px; grid-template-rows: minmax(0,1.15fr) minmax(0,1fr) minmax(0,0.8fr); min-height: 0; }
+
+.drv-pick {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 8px; border-bottom: 1px solid var(--line-soft); cursor: pointer;
+  font-family: var(--mono); font-size: 12px;
+}
+.drv-pick:hover { background: #161d27; }
+.drv-pick.a { background: #10222a; box-shadow: inset 2px 0 0 var(--accent); }
+.drv-pick.b { background: #251a2e; box-shadow: inset 2px 0 0 var(--purple); }
+
+.kv { display: flex; justify-content: space-between; gap: 10px; padding: 4px 10px; font-size: 11.5px; border-bottom: 1px solid var(--line-soft); }
+.kv span:last-child { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+.hint { padding: 16px; color: var(--dim); font-size: 12px; line-height: 1.6; }
+
+/* --- status bar ---------------------------------------------------------- */
+
+.statusbar {
+  flex: 0 0 auto; height: 22px;
+  display: flex; align-items: center; gap: 14px;
+  padding: 0 12px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  font-family: var(--mono); font-size: 10px; color: var(--dim);
+}
+.statusbar b { color: var(--text-2); font-weight: 600; }

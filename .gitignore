@@ -1,0 +1,6 @@
+node_modules
+dist
+_to_delete
+.DS_Store
+.vercel
+*.timestamp-*.mjs
