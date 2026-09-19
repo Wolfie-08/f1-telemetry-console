@@ -1,64 +1,76 @@
 # F1 Telemetry Console
 
-A live race-analysis console for Formula 1, built against the public
-[OpenF1](https://openf1.org) API. Everything runs in the browser — there is no
-backend, no API key and no account.
+A pit-wall style Formula 1 analysis console that runs entirely in the browser.
+Live timing while a session is on, a season archive you can scrub through like
+video, and lap-vs-lap telemetry comparison with corners found in the data
+itself.
 
-Built for the 2026 Spanish Grand Prix at **Madring** (Madrid), 13 Sept 2026,
-race start **13:00 UTC / 18:00 Tashkent**.
+**Live: [f1.enkd.uz](https://f1.enkd.uz)**
+
+No backend, no build step required to run it, no account. One static page
+talking to the [OpenF1 API](https://openf1.org/).
 
 ---
 
 ## Running it
 
-### The quick way — no setup
+**The quick way.** Open `F1-Console.html`. That single file is the entire
+application — React, styles, circuit geometry, all of it inlined — and it runs
+straight off the filesystem.
 
-Double-click **`F1-Console.html`**. That single file contains the whole app
-(React, styles, circuit geometry, everything) and opens straight off the disk.
-It pulls live data from OpenF1 over HTTPS as soon as it loads.
-
-### The dev way
+**The dev way.**
 
 ```bash
-npm install      # run this on THIS machine — see the note below
+npm install
 npm run dev      # http://localhost:5173
 npm run build    # rebuilds dist/ and regenerates F1-Console.html
 ```
 
-> **Note on `node_modules`** — the dependencies currently in this folder were
-> installed on Linux, and esbuild/rollup ship platform-specific binaries. The
-> first time you run the dev server on macOS, delete `node_modules` and run
-> `npm install` again. `F1-Console.html` is unaffected: it is already built and
-> needs nothing installed.
+---
+
+## What it does
+
+Three views, and two modes that decide what data they show.
+
+**LIVE** follows whatever session is running, switching to it by itself fifteen
+minutes before the start. With nothing on track it counts down to the next
+session in both your time and the circuit's.
+
+**ARCHIVE** is season → round → session for every weekend since 2023. Any
+finished session gets a replay transport: play, pause, scrub, and 1× through
+60× speed, with the cars moving on the track map as the clock runs.
+
+| View | What's in it |
+|---|---|
+| **RACE** | Timing tower — position, tyre compound and age, stops, gap to leader, interval, last lap, all three sectors with live mini-sector colouring, speed trap. Purple is session best, green personal best. Alongside it: every car plotted on the circuit in real time, a race trace of cumulative gap to the leader, tyre strategy bars with pit stops marked, and the race control message feed. |
+| **COMPARE** | Pick two drivers and two laps. Speed map of the reference lap coloured by speed with corners numbered, both laps' speed and pedal traces overlaid on a shared distance axis, and a cumulative delta curve showing where the time actually went, corner by corner. |
+| **TABLE** | Drivers' and constructors' championships for the season. |
 
 ---
 
-## What it shows
+## The thing to know before you use it
 
-### RACE tab
+**OpenF1 closes to anonymous callers while a session is running.** Not just live
+timing — *everything*, historical sessions included. Requests get `401`, and
+because that response carries no CORS header a browser sees only an opaque
+network failure.
 
-| Panel | What's in it |
-|---|---|
-| **Timing tower** | Position, tyre compound and age, stops, gap to leader, interval to the car ahead, last lap, all three sector times with live mini-sector colouring, speed-trap. Purple = session best, green = personal best. |
-| **Live positions** | Every car plotted on the Madring outline, in real time, coloured by team. Click a driver in the tower to highlight them. |
-| **Race trace** | Cumulative gap to the lap leader, per lap, for the top 12. Flat lines mean matched pace; a vertical step is a pit stop; a steady slope is real pace difference. This is the panel that tells you whether an undercut is working. |
-| **Tyre strategy** | One bar per driver, segmented by stint and compound, with pit stops marked. |
-| **Race control** | The official message feed — flags, safety cars, investigations, deleted lap times — newest first. |
-| **Header** | Track status, lap counter, session-fastest lap, air/track temperature, wind, rainfall, circuit-local clock. |
+The console handles this rather than pretending the season is empty: it caches
+the calendar, recognises the blackout, and counts down to when access returns.
+It just cannot show you data it is not allowed to fetch.
 
-### COMPARE tab
+Live access is OpenF1's sponsor tier (€9.90/month). If you have an account,
+the blackout screen takes your login, mints an OAuth2 bearer token and
+re-mints it before the hourly expiry so a two-hour race doesn't drop out.
+Credentials stay in your browser and go only to `api.openf1.org/token`.
 
-Pick any two drivers and any two of their laps:
+Without one, everything works fully the moment a session ends — which is when
+the interesting analysis happens anyway.
 
-- **Speed map** — the reference lap traced on the circuit and coloured by
-  speed, with corners detected and numbered automatically.
-- **Speed / throttle / brake** — both laps overlaid on a shared distance axis.
-- **Cumulative delta** — where the time actually goes, with each corner
-  shaded and labelled by how much was won or lost in it.
-
-Corners are found from the speed trace itself (significant local minima,
-expanded to the braking point and the exit), so this works at any circuit
-without a track definition file — including brand-new ones like Madring.
+**Rate limits** are per minute as well as per second: 30/min anonymous, 60/min
+authorised. The per-minute cap binds far earlier than the per-second one, so
+all requests go through a single paced queue derived from the per-minute
+budget. Tier and current pace are shown in the status bar.
 
 ---
 
@@ -66,59 +78,69 @@ without a track definition file — including brand-new ones like Madring.
 
 ```
 src/
-  api/openf1.js        Rate-limited client. One global FIFO queue paced at
-                       ~2.6 req/s against OpenF1's hard 3 req/s cap, with
-                       429 backoff, retries, in-flight de-duplication and a
-                       permanent cache for static resources.
+  api/openf1.js        One global FIFO request queue paced off the per-minute
+                       rate limit, with OAuth2 token handling, 429 backoff,
+                       in-flight de-duplication, a 20s timeout on every
+                       request, and a permanent cache for static resources.
   state/useRaceFeed.js The polling engine. Resources are tiered by how fast
-                       they really change — location/intervals/position at 3s,
-                       laps at 6s, stints/pits/race-control/weather at 30s,
-                       classification at 90s — and every incremental fetch
-                       carries a `date>` cursor so each poll returns only what
-                       is new. Total load stays near 1.3 req/s.
-  lib/derive.js        Feed store -> timing-tower rows, lap counter, track
-                       status, race-trace series.
-  lib/telemetry.js     Lap analysis: distance integration, resampling,
-                       delta-time, corner detection, speed colouring.
+                       they actually change — positions and intervals at 5s,
+                       laps at 10s, stints and race control at 45s — and every
+                       incremental fetch carries a `date>` cursor so each poll
+                       returns only what is new.
+  state/useSeason.js   Season calendar (cached to localStorage so the app still
+                       knows what is live during a blackout) and standings.
+  state/useReplay.js   The virtual clock and its transport controls.
+  lib/replay.js        Projects the loaded history onto a virtual time.
+  lib/telemetry.js     Distance integration, resampling, delta-time, corner
+                       detection, speed colouring.
+  lib/derive.js        Feed store → timing tower rows, lap counter, flags.
   lib/track.js         Circuit geometry and projection.
   components/          One file per panel.
-tools/inline.mjs       Folds the build into the single-file F1-Console.html.
 ```
 
-**Why distance is integrated from speed, not taken from GPS.** The `/location`
-feed is sampled sparsely and drops out; the speed channel does not. Delta-time
-analysis only needs a distance axis that both laps share, and integrating
-`v·dt` gives exactly that. GPS is used only for drawing.
+Three decisions worth explaining:
 
-**Why the circuit outline is a traced lap.** Madring is new and has no entry in
-the usual circuit-geometry sources. The outline in `lib/track.js` is Norris'
-pole lap from Madrid qualifying (session 11365, lap 18, 1:31.824) recorded in
-the same coordinate frame the live position feed uses — so cars plot directly
-onto it with no registration step. `deriveOutline()` will build the same thing
-for any other circuit from any clean lap.
+**The circuit outline is a traced lap.** Madring is new and absent from the
+usual circuit-geometry sources. The outline is Norris' pole lap from Madrid
+qualifying, recorded in the same coordinate frame the live position feed
+uses — so cars plot onto it directly, with no registration step.
+`deriveOutline()` builds the same thing for any circuit from any clean lap.
 
----
+**Distance is integrated from speed, not taken from GPS.** The position feed is
+sampled sparsely and drops out; the speed channel does not. Delta-time analysis
+only needs a distance axis both laps share, and integrating `v·dt` gives
+exactly that.
 
-## Things worth knowing
+**Corners are detected, not configured.** Significant local minima in the speed
+trace, each expanded back to the braking point and forward to the exit. No
+track definition file, which is why it worked at a brand-new circuit on day
+one.
 
-- **Session selection is automatic.** On load the console picks whatever
-  session is running right now; if nothing is live it falls back to the most
-  recent one. The dropdown in the header overrides that.
-- **Polling only runs for a live session.** A finished session loads once in
-  full and then sits still, so you can pick apart yesterday's qualifying
-  without burning requests.
-- **The status bar is the health check.** Request count, queue depth, 429s,
-  failures, and how stale the newest sample is. If `429` starts climbing,
-  something is polling harder than it should.
-- **Free-tier lag.** OpenF1's public endpoint is not instantaneous; expect the
-  feed to sit a little behind the TV picture. The `feed Ns ago` readout in the
-  status bar tells you exactly how far.
-- **Lapped cars.** OpenF1 sends `gap_to_leader` as the string `"+1 LAP"` once a
-  car is lapped; the tower passes that straight through.
+**Replay is a projection, not a second data feed.** A finished session loads
+once in full; replaying it is a pure function from that history and a virtual
+time. The only thing fetched as the clock moves is a three-second window of car
+positions, because a full race's position trace runs to hundreds of thousands
+of samples.
 
 ---
 
-## Data source
+## Related work
 
-All data from the [OpenF1 API](https://openf1.org/) — an open-source,
-unofficial Formula 1 data service. Not affiliated with Formula 1 or the FIA.
+[FastF1](https://github.com/theOehrly/Fast-F1) is the serious Python library for
+F1 data analysis and worth using for anything heavier than this.
+[f1-dash](https://f1-dash.com/) and [monaco](https://github.com/tdjsnelling/monaco)
+are live-timing dashboards that decode F1's own SignalR feed through a server-side
+relay — more capable live, but they need a backend, and F1 has been IP-blocking
+hosted instances.
+
+---
+
+## Disclaimer
+
+Unofficial and unaffiliated with Formula 1. F1, FORMULA ONE, FORMULA 1, and
+related marks are trade marks of Formula One Licensing B.V. Data comes from the
+[OpenF1 API](https://openf1.org/), itself an unofficial project.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
